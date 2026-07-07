@@ -3,7 +3,6 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { BloomPass } from "three/addons/postprocessing/BloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import videoUrl from "../../test.mp4";
 import { createRecorderOptions, getExportProfile } from "../lib/export-quality.js";
 import { createPreviewCameraPose, createVideoGridCell } from "../lib/scene-helpers.js";
 import { DEFAULT_TIMELINE_ROWS, getTimelineState, normalizeTimelineRows } from "../lib/timeline-config.js";
@@ -26,7 +25,8 @@ export class NeonTunnelApp {
       filter: "inherit",
       twist: 1,
     };
-    this.activeVideoSourceName = "test.mp4";
+    this.activeVideoSourceName = "uploaded video";
+    this.hasVideoSource = false;
     this.uploadedVideoObjectUrl = null;
     this.previewPaused = false;
     this.isRecording = false;
@@ -67,13 +67,12 @@ export class NeonTunnelApp {
 
   createVideoElement() {
     const video = document.createElement("video");
-    video.src = videoUrl;
     video.crossOrigin = "anonymous";
     video.loop = true;
     video.muted = true;
     video.volume = 1;
     video.playsInline = true;
-    video.preload = "auto";
+    video.preload = "metadata";
     return video;
   }
 
@@ -269,11 +268,19 @@ export class NeonTunnelApp {
     return this.video.duration || 0;
   }
 
+  hasVideo() {
+    return this.hasVideoSource;
+  }
+
   isPaused() {
     return this.previewPaused;
   }
 
   async togglePlayback() {
+    if (!this.hasVideoSource) {
+      return this.previewPaused;
+    }
+
     if (this.previewPaused) {
       await this.playPreview();
     } else {
@@ -284,6 +291,10 @@ export class NeonTunnelApp {
   }
 
   async playPreview() {
+    if (!this.hasVideoSource) {
+      return;
+    }
+
     this.previewPaused = false;
     await this.video.play();
   }
@@ -294,6 +305,10 @@ export class NeonTunnelApp {
   }
 
   syncPreviewPlayback() {
+    if (!this.hasVideoSource) {
+      return Promise.resolve();
+    }
+
     if (this.previewPaused) {
       this.video.pause();
       return Promise.resolve();
@@ -306,10 +321,12 @@ export class NeonTunnelApp {
     const source = createUploadedVideoSource(file);
     const previousObjectUrl = this.uploadedVideoObjectUrl;
     const previousSourceName = this.activeVideoSourceName;
+    const previousHadVideoSource = this.hasVideoSource;
     const previousSrc = this.video.currentSrc || this.video.src;
 
     this.uploadedVideoObjectUrl = source.url;
     this.activeVideoSourceName = source.name;
+    this.hasVideoSource = true;
     onStatus?.(`Loading ${source.name}...`);
 
     try {
@@ -328,7 +345,12 @@ export class NeonTunnelApp {
       URL.revokeObjectURL(source.url);
       this.uploadedVideoObjectUrl = previousObjectUrl;
       this.activeVideoSourceName = previousSourceName;
-      this.video.src = previousSrc;
+      this.hasVideoSource = previousHadVideoSource;
+      if (previousSrc) {
+        this.video.src = previousSrc;
+      } else {
+        this.video.removeAttribute("src");
+      }
       this.video.load();
       this.syncPreviewPlayback();
       throw error;
@@ -346,6 +368,10 @@ export class NeonTunnelApp {
 
     if (!("MediaRecorder" in window)) {
       throw new Error("MediaRecorder is not supported in this browser.");
+    }
+
+    if (!this.hasVideoSource) {
+      throw new Error("Upload a video before exporting.");
     }
 
     this.isRecording = true;
@@ -460,6 +486,10 @@ export class NeonTunnelApp {
   }
 
   ensureVideoMetadata() {
+    if (!this.hasVideoSource) {
+      return Promise.reject(new Error("Upload a video first."));
+    }
+
     if (Number.isFinite(this.video.duration) && this.video.duration > 0) {
       return Promise.resolve();
     }
@@ -475,6 +505,10 @@ export class NeonTunnelApp {
   }
 
   seekVideo(time) {
+    if (!this.hasVideoSource) {
+      return new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+
     if (Math.abs(this.video.currentTime - time) < 0.01) {
       return new Promise((resolve) => requestAnimationFrame(resolve));
     }

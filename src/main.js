@@ -28,6 +28,15 @@ if (app) {
     const exportButton = app.querySelector("#export-button");
     const exportStatus = app.querySelector("#export-status");
     const uploadInput = app.querySelector("#video-upload");
+    const syncControls = () => {
+      const hasVideo = neonTunnelApp.hasVideo();
+      if (exportButton) {
+        exportButton.disabled = !hasVideo;
+      }
+      if (playbackButton) {
+        playbackButton.disabled = !hasVideo;
+      }
+    };
     const syncPlaybackButton = () => {
       if (!playbackButton) {
         return;
@@ -36,9 +45,15 @@ if (app) {
       const state = createPlaybackButtonState(neonTunnelApp.isPaused());
       playbackButton.textContent = state.label;
       playbackButton.setAttribute("aria-pressed", String(state.pressed));
+      playbackButton.disabled = !neonTunnelApp.hasVideo();
     };
 
     playbackButton?.addEventListener("click", async () => {
+      if (!neonTunnelApp.hasVideo()) {
+        exportStatus.textContent = "Upload a video first";
+        return;
+      }
+
       playbackButton.disabled = true;
 
       try {
@@ -67,11 +82,14 @@ if (app) {
             exportStatus.textContent = status;
           },
         });
+        syncControls();
       } catch (error) {
         exportStatus.textContent = error instanceof Error ? error.message : "Video upload failed";
       } finally {
-        exportButton.disabled = false;
-        if (playbackButton) {
+        if (exportButton) {
+          exportButton.disabled = !neonTunnelApp.hasVideo();
+        }
+        if (playbackButton && neonTunnelApp.hasVideo()) {
           syncPlaybackButton();
           playbackButton.disabled = false;
         }
@@ -82,6 +100,11 @@ if (app) {
     });
 
     exportButton?.addEventListener("click", async () => {
+      if (!neonTunnelApp.hasVideo()) {
+        exportStatus.textContent = "Upload a video first";
+        return;
+      }
+
       exportButton.disabled = true;
       if (playbackButton) {
         playbackButton.disabled = true;
@@ -109,6 +132,8 @@ if (app) {
     });
 
     syncPlaybackButton();
+    syncControls();
+    exportStatus.textContent = "Upload a video to start";
 
     if (timelineRoot) {
       mountTimelinePanel(timelineRoot, {
